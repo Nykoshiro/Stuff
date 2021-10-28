@@ -104,6 +104,7 @@ services:
       - dockernet
     stdin_open: true
     tty: true
+    # Is this config intentional? Typo? Should it be always?
     restart: "no"
 volumes:
   assets:
