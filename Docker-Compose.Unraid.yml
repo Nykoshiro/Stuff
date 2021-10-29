@@ -4,6 +4,14 @@
 # Modify settings.py & settings_docker.py on api/celery_slow/celery_fast containers; enables use of local storage vs cloud
 # DEFAULT_FILE_STORAGE=api.storage.FileSystemStorage
 #
+# Improvements to settings.py & settings_docker.py that can allow for environment variables to be used with compose
+#
+# DEFAULT_FILE_STORAGE = os.getenv('DEFAULT_FILE_STORAGE', 'api.storage.FileSystemStorage')
+# MEDIA_ROOT = os.getenv('MEDIA_ROOT', 'media')
+# MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
+# SEPARATE_DIR = os.getenv('SEPARATE_DIR', 'separate')
+# UPLOAD_DIR = os.getenv('UPLOAD_DIR', 'uploads')
+#
 # Action items
 # CPU Pinning / UID / GID / GIDLIST? / UMASK? / SLAVE:RW for unassigned drives?
 
