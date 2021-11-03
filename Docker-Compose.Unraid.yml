@@ -1,19 +1,21 @@
 # Reference https://github.com/JeffreyCA/spleeter-web
+# Spleeter-Web (GPU)
 # Combines logic from docker-compose.gpu.yml, docker-compose.prod.selfhost.yml, docker-compose.prod.yml
-#
-# Modify settings.py & settings_docker.py on api/celery_slow/celery_fast containers; enables use of local storage vs cloud
-# DEFAULT_FILE_STORAGE=api.storage.FileSystemStorage
 #
 # Improvements to settings.py & settings_docker.py that can allow for environment variables to be used with compose
 #
-# DEFAULT_FILE_STORAGE = os.getenv('DEFAULT_FILE_STORAGE', 'api.storage.FileSystemStorage')
 # MEDIA_ROOT = os.getenv('MEDIA_ROOT', 'media')
 # MEDIA_URL = os.getenv('MEDIA_URL', '/media/')
 # SEPARATE_DIR = os.getenv('SEPARATE_DIR', 'separate')
 # UPLOAD_DIR = os.getenv('UPLOAD_DIR', 'uploads')
 #
 # Action items
-# CPU Pinning / UID / GID / GIDLIST? / UMASK? / SLAVE:RW for unassigned drives?
+# CPU Pinning / UID / GID / GIDLIST? / UMASK? / SLAVE:RW for unassigned drives? / APP_HOST, stop using wildcard /
+#
+# Current State:  
+#   Dynamic Mixes do not playback; 
+#   Stems created with Dynamic Mix do not download (e.g. nginx port missing in url)
+#   Custom Nginx.conf required
 
 version: '3.4'
 x-celery-env: &celery-env
@@ -23,9 +25,14 @@ x-celery-env: &celery-env
   - CPU_SEPARATION=0
   - CELERY_FAST_QUEUE_CONCURRENCY=${CELERY_FAST_QUEUE_CONCURRENCY:-3}
   - CELERY_SLOW_QUEUE_CONCURRENCY=${CELERY_SLOW_QUEUE_CONCURRENCY:-1}
-  #- NVIDIA_VISIBLE_DEVICES=all #default
-  - NVIDIA_VISIBLE_DEVICES=GPU-GUID #unraid GPU identifier to specify specific GPU
+  - NVIDIA_VISIBLE_DEVICES=<Unraid GPU-GUID or all>
   - NVIDIA_DRIVER_CAPABILITIES=all
+  - DEFAULT_FILE_STORAGE=FILE
+  #- NGINX_PORT=3148
+  - MEDIA_ROOT=media
+  - MEDIA_URL=/media/
+  - SEPARATE_DIR=separate
+  - UPLOAD_DIR=uploads
   
 services:
   redis:
@@ -35,23 +42,39 @@ services:
       - "6379"
     volumes:
       - redis-data:/data
-    #custom unraid nw name
+    #custom Unraid network name
     networks:
       - dockernet
     restart: always
-  #Removed since UNRAID runs nginx & port 80 conflicts with UNRAID
+  nginx:
+    image: jeffreyca/spleeter-web-nginx:${TAG:-latest}
+    #syntax for pulling previous versions
+    #image: jeffreyca/spleeter-web-nginx:v3.9.0
+    ports:
+      - "3148:3148"
+    environment:
+      - NGINX_PORT=3148
+    volumes:
+      - staticfiles:/webapp/staticfiles
+      #added volumes for self hosting & unraid shares
+      - /mnt/user/unraid/paths:/webapp/media
+    #custom Unraid network name
+    networks:
+      - dockernet
+    depends_on:
+      - api
+    restart: always
   api:
     image: jeffreyca/spleeter-web-backend:${TAG:-latest}-gpu
-    #added ports
-    ports:
-      - "8000:8000"
+    #syntax for pulling previous versions
+    #image: jeffreyca/spleeter-web-backend:v3.9.0-gpu
     volumes:
       - assets:/webapp/frontend/assets
       - sqlite-data:/webapp/sqlite
       - staticfiles:/webapp/staticfiles
       #added volumes for self hosting & unraid shares
       - /mnt/user/unraid/paths:/webapp/media
-    #custom unraid nw name
+    #custom Unraid network name
     networks:
       - dockernet
     stdin_open: true
@@ -61,16 +84,23 @@ services:
       - CELERY_BROKER_URL=redis://redis:6379/0
       - CELERY_RESULT_BACKEND=redis://redis:6379/0
       - CPU_SEPARATION=0
-      #unraid host ip / name required?
-      - APP_HOST=0.0.0.0
+      #unraid host ip / name required?  May need to figure 
+      - APP_HOST=*
       #required?
-      - YOUTUBE_API_KEY=
+      - YOUTUBE_API_KEY=<INSERT YT KEY HERE>
+       #- NGINX_PORT=3148
+      - DEFAULT_FILE_STORAGE=FILE
+      - MEDIA_ROOT=media
+      - SEPARATE_DIR=separate
+      - UPLOAD_DIR=uploads
     depends_on:
       - redis
       - frontend
     restart: always
   celery-fast:
     image: jeffreyca/spleeter-web-backend:${TAG:-latest}-gpu
+    #syntax for pulling previous versions
+    #image: jeffreyca/spleeter-web-backend:v3.9.0-gpu
     entrypoint: ./celery-fast-entrypoint.sh
     volumes:
       - celery-data:/webapp/celery
@@ -78,7 +108,7 @@ services:
       - sqlite-data:/webapp/sqlite
       #added volumes for self hosting & unraid shares
       - /mnt/user/unraid/paths:/webapp/media
-    #custom unraid nw name
+    #custom Unraid network name
     networks:
       - dockernet
     runtime: nvidia
@@ -88,6 +118,8 @@ services:
     restart: always
   celery-slow:
     image: jeffreyca/spleeter-web-backend:${TAG:-latest}-gpu
+    #syntax for pulling previous versions
+    #image: jeffreyca/spleeter-web-backend:v3.9.0-gpu
     entrypoint: ./celery-slow-entrypoint.sh
     volumes:
       - celery-data:/webapp/celery
@@ -95,7 +127,7 @@ services:
       - sqlite-data:/webapp/sqlite
       #added volumes for self hosting & unraid shares
       - /mnt/user/unraid/paths:/webapp/media
-    #custom unraid nw name
+    #custom Unraid network name
     networks:
       - dockernet
     runtime: nvidia
@@ -105,9 +137,11 @@ services:
     restart: always
   frontend:
     image: jeffreyca/spleeter-web-frontend:${TAG:-latest}
+    #syntax for pulling previous versions
+    #image: jeffreyca/spleeter-web-frontend:v3.9.0
     volumes:
       - assets:/webapp/frontend/assets
-    #custom unraid nw name
+    #custom Unraid network name
     networks:
       - dockernet
     stdin_open: true
@@ -121,7 +155,7 @@ volumes:
   redis-data:
   sqlite-data:
   staticfiles:
-#custom unraid nw name
+#custom Unraid network name
 networks:
   dockernet:
     external: true
