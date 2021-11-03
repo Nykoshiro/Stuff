@@ -51,7 +51,7 @@ services:
     #syntax for pulling previous versions
     #image: jeffreyca/spleeter-web-nginx:v3.9.0
     ports:
-      - "3148:3148"
+      - "<custom port for Unraid>:80"
     environment:
       - NGINX_PORT=3148
     volumes:
